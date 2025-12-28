@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Elia Forecast Explorer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+        }
+
+        header {
+            background: #222;
+            color: #fff;
+            padding: 1rem 1.5rem;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+        main {
+            padding: 1rem 1.5rem 4rem;
+        }
+
+        .config {
+            background: #fff;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .config label {
+            font-weight: 600;
+        }
+
+        .config input {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        .card {
+            background: #fff;
+            padding: 0.75rem 0.75rem 1rem;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.05rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .card small {
+            color: #666;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .field {
+            margin-bottom: 0.4rem;
+        }
+
+        .field label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.1rem;
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.25rem 0.4rem;
+            font-size: 0.9rem;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            padding: 0.35rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        #output {
+            margin-top: 1rem;
+            background: #111;
+            color: #eee;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Elia Forecast Explorer</h1>
+    </header>
+
+    <main>
+        <section class="config">
+            <div class="field">
+                <label for="baseUrl">API base URL</label>
+                <input id="baseUrl" type="text" value="https://elia-api.azurewebsites.net" />
+            </div>
+            <small>Change this if you deploy the API under a different URL.</small>
+        </section>
+
+        <section class="grid">
+            <!-- Health -->
+            <div class="card">
+                <h2>Health check</h2>
+                <small>GET /</small>
+                <button onclick="callEndpoint('/', {}, 'GET')">Call</button>
+            </div>
+
+            <!-- NEW: /api/measured/combined -->
+            <div class="card">
+                <h2>Measured combined (historical)</h2>
+                <small>GET /api/measured/combined</small>
+                <div class="field">
+                    <label for="measuredRegion">region *</label>
+                    <input id="measuredRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="measuredFrom">from (ISO)</label>
+                    <input id="measuredFrom" placeholder="2025-12-07T00:00:00Z" />
+                </div>
+                <div class="field">
+                    <label for="measuredTo">to (ISO)</label>
+                    <input id="measuredTo" placeholder="2025-12-08T00:00:00Z" />
+                </div>
+                <button onclick="handleMeasuredCombined()">Call</button>
+            </div>
+
+            <!-- NEW: /api/timeseries/overlay -->
+            <div class="card">
+                <h2>Overlay (measured then forecast)</h2>
+                <small>GET /api/timeseries/overlay</small>
+                <div class="field">
+                    <label for="overlayRegion">region *</label>
+                    <input id="overlayRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="overlayFrom">from (ISO)</label>
+                    <input id="overlayFrom" placeholder="2025-12-07T00:00:00Z" />
+                </div>
+                <div class="field">
+                    <label for="overlayTo">to (ISO)</label>
+                    <input id="overlayTo" placeholder="2025-12-08T00:00:00Z" />
+                </div>
+                <button onclick="handleOverlay()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/regions -->
+            <div class="card">
+                <h2>List regions</h2>
+                <small>GET /api/forecasts/regions</small>
+                <div class="field">
+                    <label for="regionsIncludeHistorical">includeHistoricalData</label>
+                    <select id="regionsIncludeHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleRegions()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/combined -->
+            <div class="card">
+                <h2>Combined time series</h2>
+                <small>GET /api/forecasts/combined</small>
+                <div class="field">
+                    <label for="combinedRegion">region *</label>
+                    <input id="combinedRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="combinedFrom">from (ISO)</label>
+                    <input id="combinedFrom" placeholder="2025-12-07T00:00:00Z" />
+                </div>
+                <div class="field">
+                    <label for="combinedTo">to (ISO)</label>
+                    <input id="combinedTo" placeholder="2025-12-08T00:00:00Z" />
+                </div>
+                <div class="field">
+                    <label for="combinedHistorical">includeHistoricalData</label>
+                    <select id="combinedHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleCombined()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/latest -->
+            <div class="card">
+                <h2>Latest for region</h2>
+                <small>GET /api/forecasts/latest</small>
+                <div class="field">
+                    <label for="latestRegion">region *</label>
+                    <input id="latestRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="latestHistorical">includeHistoricalData</label>
+                    <select id="latestHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleLatest()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/latest/all -->
+            <div class="card">
+                <h2>Latest for all regions</h2>
+                <small>GET /api/forecasts/latest/all</small>
+                <div class="field">
+                    <label for="latestAllHistorical">includeHistoricalData</label>
+                    <select id="latestAllHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleLatestAll()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/raw -->
+            <div class="card">
+                <h2>Raw forecast rows</h2>
+                <small>GET /api/forecasts/raw</small>
+                <div class="field">
+                    <label for="rawRegion">region *</label>
+                    <input id="rawRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="rawFrom">from (ISO)</label>
+                    <input id="rawFrom" />
+                </div>
+                <div class="field">
+                    <label for="rawTo">to (ISO)</label>
+                    <input id="rawTo" />
+                </div>
+                <div class="field">
+                    <label for="rawHistorical">includeHistoricalData</label>
+                    <select id="rawHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleRaw()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/versions -->
+            <div class="card">
+                <h2>Version history for timestamp</h2>
+                <small>GET /api/forecasts/versions</small>
+                <div class="field">
+                    <label for="versionsRegion">region *</label>
+                    <input id="versionsRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="versionsValidTime">validTime (ISO) *</label>
+                    <input id="versionsValidTime" placeholder="2025-12-07T06:30:00Z" />
+                </div>
+                <button onclick="handleVersions()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/versions/summary -->
+            <div class="card">
+                <h2>Version summary</h2>
+                <small>GET /api/forecasts/versions/summary</small>
+                <div class="field">
+                    <label for="vsRegion">region (optional)</label>
+                    <input id="vsRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="vsFrom">from (ISO)</label>
+                    <input id="vsFrom" />
+                </div>
+                <div class="field">
+                    <label for="vsTo">to (ISO)</label>
+                    <input id="vsTo" />
+                </div>
+                <button onclick="handleVersionSummary()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/summary -->
+            <div class="card">
+                <h2>Regional summary</h2>
+                <small>GET /api/forecasts/summary</small>
+                <div class="field">
+                    <label for="sRegion">region *</label>
+                    <input id="sRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="sFrom">from (ISO)</label>
+                    <input id="sFrom" />
+                </div>
+                <div class="field">
+                    <label for="sTo">to (ISO)</label>
+                    <input id="sTo" />
+                </div>
+                <div class="field">
+                    <label for="sHistorical">includeHistoricalData</label>
+                    <select id="sHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleSummary()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/compare-regions -->
+            <div class="card">
+                <h2>Compare regions</h2>
+                <small>GET /api/forecasts/compare-regions</small>
+                <div class="field">
+                    <label for="crRegions">regions (comma separated) *</label>
+                    <input id="crRegions" placeholder="Flanders,Wallonia" />
+                </div>
+                <div class="field">
+                    <label for="crFrom">from (ISO)</label>
+                    <input id="crFrom" />
+                </div>
+                <div class="field">
+                    <label for="crTo">to (ISO)</label>
+                    <input id="crTo" />
+                </div>
+                <div class="field">
+                    <label for="crHistorical">includeHistoricalData</label>
+                    <select id="crHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleCompareRegions()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/peaks -->
+            <div class="card">
+                <h2>Peak load times</h2>
+                <small>GET /api/forecasts/peaks</small>
+                <div class="field">
+                    <label for="pRegion">region *</label>
+                    <input id="pRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="pFrom">from (ISO)</label>
+                    <input id="pFrom" />
+                </div>
+                <div class="field">
+                    <label for="pTo">to (ISO)</label>
+                    <input id="pTo" />
+                </div>
+                <div class="field">
+                    <label for="pTop">top N</label>
+                    <input id="pTop" type="number" value="10" />
+                </div>
+                <div class="field">
+                    <label for="pHistorical">includeHistoricalData</label>
+                    <select id="pHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handlePeaks()">Call</button>
+            </div>
+
+            <!-- /api/forecasts/export -->
+            <div class="card">
+                <h2>Export forecasts</h2>
+                <small>GET /api/forecasts/export</small>
+                <div class="field">
+                    <label for="eRegion">region *</label>
+                    <input id="eRegion" placeholder="Flanders" />
+                </div>
+                <div class="field">
+                    <label for="eFrom">from (ISO)</label>
+                    <input id="eFrom" />
+                </div>
+                <div class="field">
+                    <label for="eTo">to (ISO)</label>
+                    <input id="eTo" />
+                </div>
+                <div class="field">
+                    <label for="eFormat">format</label>
+                    <select id="eFormat">
+                        <option value="csv">csv</option>
+                        <option value="json">json</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="eHistorical">includeHistoricalData</label>
+                    <select id="eHistorical">
+                        <option value="">(default: false)</option>
+                        <option value="false">false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+                <button onclick="handleExport()">Call (shows result below)</button>
+            </div>
+        </section>
+
+        <section>
+            <h2>Response</h2>
+            <pre id="output">// responses will appear here</pre>
+        </section>
+    </main>
+
+    <script>
+        function getBaseUrl() {
+            return document.getElementById("baseUrl").value.replace(/\/+$/, "");
+        }
+
+        function buildQuery(params) {
+            const usp = new URLSearchParams();
+            for (const [k, v] of Object.entries(params)) {
+                if (v === undefined || v === null || v === "") continue;
+                usp.append(k, v);
+            }
+            const qs = usp.toString();
+            return qs ? "?" + qs : "";
+        }
+
+        async function callEndpoint(path, params, method = "GET") {
+            const output = document.getElementById("output");
+            const url = getBaseUrl() + path + buildQuery(params);
+
+            output.textContent = `Request: ${method} ${url}\n\nLoading...`;
+
+            try {
+                const res = await fetch(url, {method});
+                const contentType = res.headers.get("content-type") || "";
+
+                let body;
+                if (contentType.includes("application/json")) {
+                    const json = await res.json();
+                    body = JSON.stringify(json, null, 2);
+                } else {
+                    body = await res.text();
+                }
+
+                output.textContent =
+                    `Request: ${method} ${url}\nStatus: ${res.status} ${res.statusText}\n\n` +
+                    body;
+            } catch (err) {
+                output.textContent =
+                    `Request: ${method} ${url}\n\nError:\n` + (err && err.message ? err.message : err);
+            }
+        }
+
+        // NEW handlers
+        function handleMeasuredCombined() {
+            const region = document.getElementById("measuredRegion").value;
+            const from = document.getElementById("measuredFrom").value;
+            const to = document.getElementById("measuredTo").value;
+
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+
+            callEndpoint("/api/measured/combined", {region, from, to});
+        }
+
+        function handleOverlay() {
+            const region = document.getElementById("overlayRegion").value;
+            const from = document.getElementById("overlayFrom").value;
+            const to = document.getElementById("overlayTo").value;
+
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+
+            callEndpoint("/api/timeseries/overlay", {region, from, to});
+        }
+
+        // Existing handlers
+        function handleRegions() {
+            const include = document.getElementById("regionsIncludeHistorical").value;
+            callEndpoint("/api/forecasts/regions", {includeHistoricalData: include});
+        }
+
+        function handleCombined() {
+            const region = document.getElementById("combinedRegion").value;
+            const from = document.getElementById("combinedFrom").value;
+            const to = document.getElementById("combinedTo").value;
+            const include = document.getElementById("combinedHistorical").value;
+
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+
+            callEndpoint("/api/forecasts/combined", {region, from, to, includeHistoricalData: include});
+        }
+
+        function handleLatest() {
+            const region = document.getElementById("latestRegion").value;
+            const include = document.getElementById("latestHistorical").value;
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/latest", {region, includeHistoricalData: include});
+        }
+
+        function handleLatestAll() {
+            const include = document.getElementById("latestAllHistorical").value;
+            callEndpoint("/api/forecasts/latest/all", {includeHistoricalData: include});
+        }
+
+        function handleRaw() {
+            const region = document.getElementById("rawRegion").value;
+            const from = document.getElementById("rawFrom").value;
+            const to = document.getElementById("rawTo").value;
+            const include = document.getElementById("rawHistorical").value;
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/raw", {region, from, to, includeHistoricalData: include});
+        }
+
+        function handleVersions() {
+            const region = document.getElementById("versionsRegion").value;
+            const validTime = document.getElementById("versionsValidTime").value;
+            if (!region || !validTime) {
+                alert("region and validTime are required");
+                return;
+            }
+            callEndpoint("/api/forecasts/versions", {region, validTime});
+        }
+
+        function handleVersionSummary() {
+            const region = document.getElementById("vsRegion").value;
+            const from = document.getElementById("vsFrom").value;
+            const to = document.getElementById("vsTo").value;
+            callEndpoint("/api/forecasts/versions/summary", {region, from, to});
+        }
+
+        function handleSummary() {
+            const region = document.getElementById("sRegion").value;
+            const from = document.getElementById("sFrom").value;
+            const to = document.getElementById("sTo").value;
+            const include = document.getElementById("sHistorical").value;
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/summary", {region, from, to, includeHistoricalData: include});
+        }
+
+        function handleCompareRegions() {
+            const regions = document.getElementById("crRegions").value;
+            const from = document.getElementById("crFrom").value;
+            const to = document.getElementById("crTo").value;
+            const include = document.getElementById("crHistorical").value;
+            if (!regions) {
+                alert("regions is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/compare-regions", {regions, from, to, includeHistoricalData: include});
+        }
+
+        function handlePeaks() {
+            const region = document.getElementById("pRegion").value;
+            const from = document.getElementById("pFrom").value;
+            const to = document.getElementById("pTo").value;
+            const top = document.getElementById("pTop").value;
+            const include = document.getElementById("pHistorical").value;
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/peaks", {region, from, to, top, includeHistoricalData: include});
+        }
+
+        function handleExport() {
+            const region = document.getElementById("eRegion").value;
+            const from = document.getElementById("eFrom").value;
+            const to = document.getElementById("eTo").value;
+            const format = document.getElementById("eFormat").value;
+            const include = document.getElementById("eHistorical").value;
+            if (!region) {
+                alert("region is required");
+                return;
+            }
+            callEndpoint("/api/forecasts/export", {region, from, to, format, includeHistoricalData: include});
+        }
+    </script>
+</body>
+
+</html>
